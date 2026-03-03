@@ -1,0 +1,14 @@
+# Mengabaikan folder library yang berat
+node_modules/
+__pycache__/
+
+# MENGABAIKAN FILE RAHASIA (SANGAT PENTING)
+.env
+backend/.env
+dashboard/.env
+
+# Mengabaikan file sistem operasi
+.DS_Store
+
+.wwebjs_auth/
+.wwebjs_cache/

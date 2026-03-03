@@ -1,0 +1,7 @@
+streamlit
+pymongo
+pandas
+python-dotenv
+certifi
+PyPDF2
+plotly
