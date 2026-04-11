@@ -5,18 +5,34 @@ const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
 });
 
-// Parameter bertambah: inventoryData (untuk baca stok) dan reduceStockFunc (eksekutor)
-async function generateAIResponse(systemPrompt, knowledgeBase, inventoryData, chatHistory, reduceStockFunc) {
+// Parameter bertambah: transferToHumanFunc
+async function generateAIResponse(systemPrompt, knowledgeBase, inventoryData, chatHistory, reduceStockFunc, transferToHumanFunc) {
     try {
         let finalSystemPrompt = systemPrompt;
         
+        // [BACKEND GUARD] Cek apakah stok sudah dipotong sebelumnya
+        const isOrderAlreadyProcessed = chatHistory.some(msg => 
+            msg.role === "assistant" && 
+            msg.content && 
+            (msg.content.toLowerCase().includes("amankan") || 
+             msg.content.toLowerCase().includes("siap dikirim") ||
+             msg.content.toLowerCase().includes("terima kasih udah belanja"))
+        );
+
         if (knowledgeBase && knowledgeBase.trim() !== "") {
             finalSystemPrompt += `\n\n=== INFORMASI TOKO / KNOWLEDGE BASE ===\n${knowledgeBase}`;
         }
         
-        // Suntikkan data stok real-time ke otak AI
         if (inventoryData && inventoryData.trim() !== "") {
-            finalSystemPrompt += `\n\n${inventoryData}\nPENTING: Jika pelanggan mengonfirmasi ingin membeli barang dan stoknya tersedia, kamu WAJIB memanggil fungsi reduceStock.`;
+            finalSystemPrompt += `\n\n=== DATA STOK GUDANG ===\n${inventoryData}\n
+ATURAN MUTLAK (STRICT RULES):
+1. Panggil tool 'reduceStock' HANYA SATU KALI, yaitu tepat saat pelanggan PERTAMA KALI mengonfirmasi pembayaran/checkout.
+2. JIKA pelanggan hanya menambahkan informasi (seperti alamat pengiriman) SETELAH melakukan pembayaran, DILARANG KERAS memanggil tool 'reduceStock' lagi. Cukup konfirmasi alamatnya.
+3. JANGAN PERNAH membalas dengan kalimat "Pesanan diamankan" atau "Pesanan diproses" SEBELUM kamu berhasil memanggil tool 'reduceStock'.`;
+
+            if (isOrderAlreadyProcessed) {
+                finalSystemPrompt += `\n\n🚨 [STATUS SISTEM]: Kamu SUDAH berhasil memotong stok pesanan ini di obrolan sebelumnya. JANGAN PERNAH memanggil fungsi 'reduceStock' lagi di balasan ini!`;
+            }
         }
 
         const messages = [
@@ -24,69 +40,96 @@ async function generateAIResponse(systemPrompt, knowledgeBase, inventoryData, ch
             ...chatHistory 
         ];
 
-        // 1. Definisikan "Alat" yang bisa dipakai AI
+        // Definisikan 2 Alat: Potong Stok & Panggil Manusia
         const tools = [
             {
                 type: "function",
                 function: {
                     name: "reduceStock",
-                    description: "Memotong atau mengurangi stok barang di database ketika pelanggan mengonfirmasi pembelian. Panggil fungsi ini HANYA jika pelanggan sudah deal ingin membeli dan menyebutkan jumlahnya.",
+                    description: "Memotong stok barang di database. HANYA panggil 1x saat pertama kali deal.",
                     parameters: {
                         type: "object",
                         properties: {
-                            itemName: {
-                                type: "string",
-                                description: "Nama barang yang dibeli (harus sama persis dengan yang ada di DAFTAR STOK GUDANG)."
-                            },
-                            quantity: {
-                                type: "integer",
-                                description: "Jumlah barang yang dibeli."
-                            }
+                            itemName: { type: "string", description: "Nama barang yang dibeli." },
+                            quantity: { type: "integer", description: "Jumlah barang yang dibeli." }
                         },
                         required: ["itemName", "quantity"]
+                    }
+                }
+            },
+            {
+                type: "function",
+                function: {
+                    name: "transferToHuman",
+                    description: "Panggil fungsi ini HANYA JIKA pelanggan marah, komplain, menanyakan hal rumit di luar Knowledge Base, atau eksplisit meminta bicara dengan CS/Admin/Manusia. Ini akan mematikan AI.",
+                    parameters: {
+                        type: "object",
+                        properties: {
+                            reason: { type: "string", description: "Alasan pengalihan (misal: 'komplain barang', 'tanya grosir')." }
+                        },
+                        required: ["reason"]
                     }
                 }
             }
         ];
 
-        // 2. Panggilan Pertama ke OpenAI
         const response = await openai.chat.completions.create({
             model: "gpt-4o-mini",
             messages: messages,
             tools: tools,
-            tool_choice: "auto", // Biarkan AI memutuskan kapan harus pakai alat
-            temperature: 0.7,
+            tool_choice: "auto", 
+            temperature: 0.2, // Temperature rendah agar AI stabil
         });
 
         const responseMessage = response.choices[0].message;
 
-        // 3. Cek apakah AI memutuskan untuk memanggil fungsi reduceStock
+        // Cek eksekusi tool
         if (responseMessage.tool_calls) {
-            // Masukkan permintaan fungsi dari AI ke dalam riwayat pesan
             messages.push(responseMessage);
 
-            // Eksekusi setiap fungsi yang diminta AI
             for (const toolCall of responseMessage.tool_calls) {
+                
+                // 1. Tool Potong Stok
                 if (toolCall.function.name === "reduceStock") {
-                    // Ambil parameter yang diracik AI (nama barang & jumlah)
+                    if (isOrderAlreadyProcessed) {
+                        console.log(`🚫 [SYSTEM BLOCK] AI mencoba memotong stok ganda. Eksekusi dicegah!`);
+                        messages.push({
+                            tool_call_id: toolCall.id,
+                            role: "tool",
+                            name: "reduceStock",
+                            content: JSON.stringify({ success: false, message: "Stok untuk pesanan ini sudah pernah dipotong." })
+                        });
+                        continue; 
+                    }
+
                     const args = JSON.parse(toolCall.function.arguments);
                     console.log(`\n⚙️  [SYSTEM] AI memicu potong stok: ${args.itemName} x ${args.quantity}`);
-
-                    // Eksekusi fungsi database sungguhan!
                     const dbResult = await reduceStockFunc(args.itemName, args.quantity);
-                    console.log(`📝 [SYSTEM] Hasil potong stok:`, dbResult);
-
-                    // 4. Masukkan hasil dari database kembali ke obrolan
                     messages.push({
                         tool_call_id: toolCall.id,
                         role: "tool",
                         name: "reduceStock",
-                        content: JSON.stringify(dbResult) // Beri tau AI hasilnya sukses/gagal
+                        content: JSON.stringify(dbResult)
+                    });
+                }
+                
+                // 2. Tool Panggil Manusia
+                if (toolCall.function.name === "transferToHuman") {
+                    const args = JSON.parse(toolCall.function.arguments);
+                    console.log(`\n🚨 [SYSTEM] AI mengalihkan chat ke Admin. Alasan: ${args.reason}`);
+                    
+                    // Nyalakan saklar di database via fungsi index.js
+                    await transferToHumanFunc(args.reason);
+
+                    messages.push({
+                        tool_call_id: toolCall.id,
+                        role: "tool",
+                        name: "transferToHuman",
+                        content: JSON.stringify({ success: true, message: "Sistem telah beralih ke Mode Manusia. Berikan respons perpisahan ramah yang meminta pelanggan menunggu admin." })
                     });
                 }
             }
 
-            // 5. Panggilan Kedua ke OpenAI (Agar AI bisa merangkai kata-kata setelah tau hasilnya)
             const finalResponse = await openai.chat.completions.create({
                 model: "gpt-4o-mini",
                 messages: messages,
@@ -95,7 +138,6 @@ async function generateAIResponse(systemPrompt, knowledgeBase, inventoryData, ch
             return finalResponse.choices[0].message.content;
         }
 
-        // Jika AI tidak memanggil fungsi (cuma ngobrol biasa)
         return responseMessage.content;
 
     } catch (error) {

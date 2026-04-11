@@ -1,11 +1,11 @@
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
-const { connectDB, getSystemPrompt, getInventory, reduceStock } = require('./database');
+const { connectDB, getSystemPrompt, getInventory, reduceStock, getHumanMode, setHumanMode } = require('./database');
 const { generateAIResponse } = require('./ai');
 const express = require('express');
 
 const app = express();
-const port = process.env.PORT || 3001; // Port Bot 2
+const port = process.env.PORT || 3001; 
 app.get('/', (req, res) => res.send('🚀 Mesin Bot WhatsApp AI 2 (OMS Edition) sedang berjalan!'));
 app.listen(port, () => console.log(`🌍 Web server aktif di port ${port}`));
 
@@ -23,13 +23,22 @@ client.on('qr', (qr) => {
 });
 
 client.on('ready', () => {
-    console.log('✅ Bot WhatsApp (Versi Manajemen Stok) sudah siap!');
+    console.log('✅ Bot WhatsApp (Versi Manajemen Stok & CS) sudah siap!');
 });
 
 client.on('message', async message => {
+    // Abaikan pesan dari grup atau status
     if (message.from.includes('@g.us') || message.from === 'status@broadcast') return;
 
     const userId = message.from; 
+
+    // 🚨 SAKLAR UTAMA (HUMAN HANDOFF GUARD)
+    // Mengecek database: Apakah admin sedang mengurus pelanggan ini?
+    const isHumanMode = await getHumanMode(userId);
+    if (isHumanMode) {
+        console.log(`⏸️ [HUMAN MODE] Mengabaikan pesan dari ${userId}. Menunggu balasan Admin.`);
+        return; // Hentikan eksekusi di sini. AI sama sekali tidak dipanggil.
+    }
 
     if (!chatMemory.has(userId)) {
         chatMemory.set(userId, []);
@@ -43,19 +52,24 @@ client.on('message', async message => {
     }
 
     try {
-        // 1. Ambil config & prompt
         const dbData = await getSystemPrompt();
-        
-        // 2. Ambil data stok real-time dari gudang
         const inventoryData = await getInventory();
         
-        // 3. Panggil AI, masukkan semua data & LEMPAR FUNGSI POTONG STOK sebagai parameter
+        // Fungsi pembungkus (wrapper) untuk alat transfer AI
+        const executeTransferToHuman = async (reason) => {
+            // Ubah saklar di database jadi TRUE, dan simpan pesan keluhan terakhir
+            await setHumanMode(userId, true, message.body);
+            console.log(`✅ [DB] Mode Manusia DIAKTIFKAN untuk ${userId}`);
+        };
+
+        // Panggil AI dengan parameter lengkap
         const aiReply = await generateAIResponse(
             dbData.prompt, 
             dbData.knowledgeBase, 
             inventoryData, 
             userHistory, 
-            reduceStock
+            reduceStock,
+            executeTransferToHuman // Inject alat pengalihan ke manusia
         );
 
         userHistory.push({ role: "assistant", content: aiReply });

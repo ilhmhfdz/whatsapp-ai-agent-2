@@ -7,11 +7,11 @@ let db;
 async function connectDB() {
     try {
         await client.connect();
-        // Memastikan tetap menggunakan database bot
         db = client.db('whatsapp_bot_2'); 
-        console.log('✅ Terhubung ke MongoDB Atlas (Bot 2)');
+        console.log('✅ DATABASE: Berhasil terhubung ke MongoDB Atlas (Bot 2)!');
     } catch (error) {
-        console.error('❌ Gagal terhubung ke MongoDB:', error);
+        console.error('❌ DATABASE ERROR: Gagal terhubung ke MongoDB. Cek IP Whitelist di Atlas!');
+        console.error(error); 
     }
 }
 
@@ -33,9 +33,7 @@ async function getSystemPrompt() {
     }
 }
 
-// === FUNGSI BARU FASE 2: MANAJEMEN INVENTARIS ===
-
-// 1. Fungsi untuk membaca ketersediaan stok agar AI tahu
+// === FASE 2: MANAJEMEN INVENTARIS ===
 async function getInventory() {
     if (!db) return "Database belum siap.";
     try {
@@ -44,7 +42,6 @@ async function getInventory() {
 
         if (items.length === 0) return "Gudang saat ini kosong.";
 
-        // Format data menjadi teks yang rapi agar AI gampang membacanya
         let inventoryText = "DAFTAR STOK GUDANG REAL-TIME:\n";
         items.forEach(item => {
             inventoryText += `- ${item.item_name} | Stok: ${item.stock} pcs | Harga: Rp${item.price}\n`;
@@ -56,28 +53,23 @@ async function getInventory() {
     }
 }
 
-// 2. Fungsi 'Action' untuk memotong stok di database
 async function reduceStock(itemName, quantity) {
     if (!db) return { success: false, message: "Database belum siap." };
     try {
         const collection = db.collection('inventory');
 
-        // Cari barang dengan nama persis atau mirip (case insensitive)
         const item = await collection.findOne({
             item_name: { $regex: new RegExp(`^${itemName}$`, "i") }
         });
 
-        // Validasi: Apakah barang ada?
         if (!item) {
             return { success: false, message: `Barang '${itemName}' tidak ditemukan di sistem gudang.` };
         }
 
-        // Validasi: Apakah stok cukup?
         if (item.stock < quantity) {
             return { success: false, message: `Gagal! Stok '${itemName}' tidak cukup. Kamu hanya bisa menjual maksimal ${item.stock} pcs.` };
         }
 
-        // Eksekusi potong stok (-quantity)
         await collection.updateOne(
             { _id: item._id },
             { $inc: { stock: -quantity } }
@@ -93,4 +85,38 @@ async function reduceStock(itemName, quantity) {
     }
 }
 
-module.exports = { connectDB, getSystemPrompt, getInventory, reduceStock };
+// === FASE 3: HUMAN HANDOFF (SAKLAR ADMIN) ===
+
+// Mengecek apakah nomor WA ini sedang dipegang oleh admin manusia
+async function getHumanMode(phoneNumber) {
+    if (!db) return false;
+    try {
+        const session = await db.collection('sessions').findOne({ phone_number: phoneNumber });
+        return session ? session.is_human_mode : false;
+    } catch (error) {
+        console.error("❌ Error getHumanMode:", error);
+        return false;
+    }
+}
+
+// Menyalakan atau mematikan saklar admin untuk nomor WA tertentu
+async function setHumanMode(phoneNumber, isHumanMode, lastMessage = "") {
+    if (!db) return;
+    try {
+        await db.collection('sessions').updateOne(
+            { phone_number: phoneNumber },
+            { 
+                $set: { 
+                    is_human_mode: isHumanMode,
+                    last_message: lastMessage,
+                    updated_at: new Date()
+                } 
+            },
+            { upsert: true } // Jika belum ada datanya, buat baru
+        );
+    } catch (error) {
+        console.error("❌ Error setHumanMode:", error);
+    }
+}
+
+module.exports = { connectDB, getSystemPrompt, getInventory, reduceStock, getHumanMode, setHumanMode };

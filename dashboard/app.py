@@ -25,18 +25,18 @@ try:
     db = client['whatsapp_bot_2'] # Menggunakan database bot
     collection = db['agent_config']
     inventory_col = db['inventory'] # Collection baru untuk stok barang
+    session_col = db['sessions'] # Collection baru untuk sesi chat & saklar admin
 except Exception as e:
     st.error(f"❌ Gagal terhubung ke MongoDB: {e}")
     st.stop()
 
 # --- SIDEBAR ---
 with st.sidebar:
-    st.markdown("🎯 **Live Demo**")
-    st.link_button("💬 Test Bot di WhatsApp(klik disini)", "https://wa.me/6285121571837", type="primary", use_container_width=True)
+    st.markdown(" **Live Demo**")
+    st.link_button(" Test Bot di WhatsApp(klik disini)", "https://wa.me/6285121571837", type="primary", use_container_width=True)
     st.header("⚙️ Status Sistem")
-    st.success("🟢 MongoDB: Terhubung")
-    st.info("🧠 Model: GPT-4o-mini (Tools Enabled)")
-
+    st.success(" MongoDB: Terhubung")
+    st.info(" Model: GPT-4o-mini (Tools Enabled)")
 # --- MAIN LAYOUT ---
 st.title("Control Panel AI Agent")
 st.markdown("Sistem Manajemen Order Cerdas. AI dapat membaca dan memotong stok secara otomatis.")
@@ -47,13 +47,10 @@ current_config = collection.find_one({"type": "system_prompt"})
 default_prompt = current_config["prompt"] if current_config else "Kamu adalah Customer Service toko..."
 current_kb = current_config.get("knowledge_base", "") if current_config else ""
 
-# Tiga Tabs
-tab1, tab2, tab3 = st.tabs(["Manajemen Stok", "Konfigurasi Prompt", " Insight & Analitik Toko"])
+# Empat Tabs (Ditambah tab Live CS & Handoff)
+tab1, tab2, tab3, tab4 = st.tabs(["Manajemen Stok", "Konfigurasi Prompt", "Insight & Analitik Toko", "🎧 Live CS & Handoff"])
 
 # TAB 1: MANAJEMEN STOK
-with tab2:
-    pass # isi tab1
-
 with tab1:
     st.subheader(" Gudang & Inventaris Toko (Interactive Mode)")
     st.markdown("Silakan klik langsung pada sel tabel di bawah untuk mengubah **Nama**, **Stok**, atau **Harga**. Kamu juga bisa **menambah baris baru** di bagian paling bawah tabel, atau mencentang baris untuk menghapusnya.")
@@ -181,9 +178,9 @@ with tab3:
         total_asset_value = (df_analytics['stock'] * df_analytics['price']).sum()
 
         with col_kpi1:
-            st.metric("📦 Total Jenis Barang (SKU)", f"{total_sku} Item")
+            st.metric("Total Jenis Barang (SKU)", f"{total_sku} Item")
         with col_kpi2:
-            st.metric("🛒 Total Fisik di Gudang", f"{total_items_physical} Pcs")
+            st.metric("Total Fisik di Gudang", f"{total_items_physical} Pcs")
         with col_kpi3:
             st.metric("💰 Estimasi Valuasi Aset", f"Rp {total_asset_value:,.0f}".replace(',', '.'))
 
@@ -244,7 +241,7 @@ with tab3:
 
         # --- 3. EARLY WARNING SYSTEM (Peringatan Stok) ---
 
-        st.subheader("🚨 Status Ketersediaan Barang")
+        st.subheader(" Status Ketersediaan Barang")
         
         # Pecah logika filter menjadi dua: Habis (0) dan Menipis (1-4)
         out_of_stock_df = df_analytics[df_analytics['stock'] <= 0]
@@ -274,3 +271,38 @@ with tab3:
 
     else:
         st.info("Gudang masih kosong. Tambahkan barang di tab Manajemen Stok untuk melihat analitik.")
+
+# TAB 4: LIVE CS & HANDOFF
+with tab4:
+    st.subheader("🎧 Live Customer Service Control")
+    st.markdown("Daftar pelanggan yang meminta bantuan Admin Manusia. Jika saklar 'Human Mode' aktif, AI akan berhenti membalas nomor tersebut.")
+    
+    # Cari nomor WA yang sedang dalam mode manusia
+    # Gunakan .sort() agar antrean yang terbaru ada di atas (opsional tapi disarankan)
+    human_mode_users = list(session_col.find({"is_human_mode": True}, {"_id": 0, "phone_number": 1, "last_message": 1, "updated_at": 1}))
+
+    if human_mode_users:
+        st.error(f" PERHATIAN: Ada {len(human_mode_users)} pelanggan yang menunggu balasan Admin!")
+        
+        # Tampilkan setiap user yang butuh bantuan dalam expander
+        for user in human_mode_users:
+            phone_num = user.get('phone_number')
+            # Rapikan format nomor (menghilangkan @c.us jika ada)
+            display_num = phone_num.split('@')[0] if phone_num else "Unknown"
+            
+            with st.expander(f"📱 Pelanggan: {display_num} | Waktu: {user.get('updated_at', 'Baru saja').strftime('%Y-%m-%d %H:%M:%S') if hasattr(user.get('updated_at'), 'strftime') else 'Baru saja'}"):
+                st.write(f"**Alasan/Pesan Terakhir:** {user.get('last_message', 'Tidak ada data pesan')}")
+                st.write("Silakan balas pesan pelanggan ini langsung melalui HP/WhatsApp Web Admin.")
+                
+                st.divider()
+                # TOMBOL UNTUK MENGEMBALIKAN KE AI
+                if st.button(f"✅ Selesai! Kembalikan {display_num} ke Bot AI", key=phone_num):
+                    # Matikan saklar di database
+                    session_col.update_one(
+                        {"phone_number": phone_num},
+                        {"$set": {"is_human_mode": False}}
+                    )
+                    st.success(f"✅ AI telah diaktifkan kembali untuk nomor {display_num}.")
+                    st.rerun() # Refresh dashboard
+    else:
+        st.success("✅ Semua pelanggan sedang dilayani oleh AI dengan aman. Belum ada antrean untuk Admin.")
