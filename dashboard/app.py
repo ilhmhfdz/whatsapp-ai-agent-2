@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 import certifi
 import PyPDF2
 import plotly.express as px
-from datetime import datetime, timedelta  # Tambahan untuk manajemen waktu
+from datetime import datetime, timedelta
 
 load_dotenv()
 
@@ -28,14 +28,14 @@ try:
     inventory_col = db['inventory'] 
     session_col = db['sessions'] 
 except Exception as e:
-    st.error(f"Gagal terhubung ke MongoDB: {e}")
+    st.error(f"❌ Gagal terhubung ke MongoDB: {e}")
     st.stop()
 
 # --- SIDEBAR ---
 with st.sidebar:
-    st.markdown("**Live Demo**")
+    st.markdown(" **Live Demo**")
     st.link_button("Test Bot di WhatsApp (klik disini)", "https://wa.me/6285121571837", type="primary", use_container_width=True)
-    st.header("Status Sistem")
+    st.header("⚙️ Status Sistem")
     st.success("MongoDB: Terhubung")
     st.info("Model: GPT-4o-mini (Tools Enabled)")
 
@@ -44,12 +44,10 @@ st.title("Control Panel AI Agent")
 st.markdown("Sistem Manajemen Order Cerdas. AI dapat membaca dan memotong stok secara otomatis.")
 st.divider()
 
-# Tarik data config
 current_config = collection.find_one({"type": "system_prompt"})
 default_prompt = current_config["prompt"] if current_config else "Kamu adalah Customer Service toko..."
 current_kb = current_config.get("knowledge_base", "") if current_config else ""
 
-# Empat Tabs
 tab1, tab2, tab3, tab4 = st.tabs(["Manajemen Stok", "Konfigurasi Prompt", "Insight & Analitik Toko", "🎧 Live CS & Handoff"])
 
 # TAB 1: MANAJEMEN STOK
@@ -154,7 +152,7 @@ with tab3:
         with col_kpi2:
             st.metric("Total Fisik di Gudang", f"{total_items_physical} Pcs")
         with col_kpi3:
-            st.metric("Estimasi Valuasi Aset", f"Rp {total_asset_value:,.0f}".replace(',', '.'))
+            st.metric("💰 Estimasi Valuasi Aset", f"Rp {total_asset_value:,.0f}".replace(',', '.'))
 
         st.divider()
         col_chart1, col_chart2 = st.columns(2)
@@ -191,27 +189,31 @@ with tab3:
 # TAB 4: LIVE CS & HANDOFF
 with tab4:
     st.subheader("Live Customer Service Control")
-    st.markdown("Kelola pelanggan yang membutuhkan bantuan admin manusia.")
+    st.markdown("Kelola pelanggan yang membutuhkan bantuan admin.")
     
-    human_mode_users = list(session_col.find({"is_human_mode": True}, {"_id": 0, "phone_number": 1, "last_message": 1, "updated_at": 1}))
+    # Menarik field display_number dari database
+    human_mode_users = list(session_col.find({"is_human_mode": True}, {"_id": 0, "phone_number": 1, "last_message": 1, "updated_at": 1, "display_number": 1}))
 
     if human_mode_users:
-        st.error(f"PERHATIAN: Ada {len(human_mode_users)} pelanggan menunggu Admin!")
+        st.error(f"🚨 PERHATIAN: Ada {len(human_mode_users)} pelanggan menunggu Admin!")
         
         for user in human_mode_users:
-            phone_num = user.get('phone_number')
-            display_num = phone_num.split('@')[0] if phone_num else "Unknown"
+            phone_num = user.get('phone_number') # ID mesin untuk dikirim balik ke database
             
-            # --- LOGIKA PERBAIKAN WAKTU (UTC TO WIB) ---
+            # Prioritaskan mengambil nomor asli (display_number). Jika tidak ada, pakai fallback.
+            display_num = user.get('display_number')
+            if not display_num:
+                display_num = phone_num.split('@')[0] if phone_num else "Unknown"
+            
+            # Logika konversi waktu ke WIB
             raw_time = user.get('updated_at')
             if isinstance(raw_time, datetime):
-                # Tambah 7 jam untuk konversi UTC ke WIB
                 wib_time = raw_time + timedelta(hours=7)
                 time_display = wib_time.strftime('%d/%m/%Y %H:%M:%S WIB')
             else:
                 time_display = "Baru saja"
             
-            with st.expander(f"Pelanggan: {display_num} | {time_display}"):
+            with st.expander(f"📱 Pelanggan: {display_num} | {time_display}"):
                 st.write(f"**Pesan Terakhir:** {user.get('last_message', 'Tidak ada data')}")
                 st.divider()
                 if st.button(f"✅ Selesaikan & Aktifkan AI", key=phone_num):

@@ -33,11 +33,10 @@ client.on('message', async message => {
     const userId = message.from; 
 
     // 🚨 SAKLAR UTAMA (HUMAN HANDOFF GUARD)
-    // Mengecek database: Apakah admin sedang mengurus pelanggan ini?
     const isHumanMode = await getHumanMode(userId);
     if (isHumanMode) {
         console.log(`⏸️ [HUMAN MODE] Mengabaikan pesan dari ${userId}. Menunggu balasan Admin.`);
-        return; // Hentikan eksekusi di sini. AI sama sekali tidak dipanggil.
+        return; 
     }
 
     if (!chatMemory.has(userId)) {
@@ -57,9 +56,15 @@ client.on('message', async message => {
         
         // Fungsi pembungkus (wrapper) untuk alat transfer AI
         const executeTransferToHuman = async (reason) => {
-            // Ubah saklar di database jadi TRUE, dan simpan pesan keluhan terakhir
-            await setHumanMode(userId, true, message.body);
-            console.log(`✅ [DB] Mode Manusia DIAKTIFKAN untuk ${userId}`);
+            // 1. Tarik informasi kontak asli dari WhatsApp
+            const contact = await message.getContact();
+            
+            // 2. Ambil nomor aslinya. Jika gagal, ambil pushname/nama profilnya.
+            const realNumber = contact.number || contact.pushname || userId.split('@')[0];
+
+            // 3. Simpan ke database (userId untuk mesin, realNumber untuk ditampilkan ke admin)
+            await setHumanMode(userId, true, message.body, realNumber);
+            console.log(`✅ [DB] Mode Manusia DIAKTIFKAN untuk pelanggan: ${realNumber}`);
         };
 
         // Panggil AI dengan parameter lengkap
@@ -69,7 +74,7 @@ client.on('message', async message => {
             inventoryData, 
             userHistory, 
             reduceStock,
-            executeTransferToHuman // Inject alat pengalihan ke manusia
+            executeTransferToHuman 
         );
 
         userHistory.push({ role: "assistant", content: aiReply });

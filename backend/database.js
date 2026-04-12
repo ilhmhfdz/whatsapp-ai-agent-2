@@ -86,8 +86,6 @@ async function reduceStock(itemName, quantity) {
 }
 
 // === FASE 3: HUMAN HANDOFF (SAKLAR ADMIN) ===
-
-// Mengecek apakah nomor WA ini sedang dipegang oleh admin manusia
 async function getHumanMode(phoneNumber) {
     if (!db) return false;
     try {
@@ -100,18 +98,23 @@ async function getHumanMode(phoneNumber) {
 }
 
 // Menyalakan atau mematikan saklar admin untuk nomor WA tertentu
-async function setHumanMode(phoneNumber, isHumanMode, lastMessage = "") {
+async function setHumanMode(phoneNumber, isHumanMode, lastMessage = "", displayNumber = "") {
     if (!db) return;
     try {
+        const updateData = { 
+            is_human_mode: isHumanMode,
+            last_message: lastMessage,
+            updated_at: new Date()
+        };
+
+        // Hanya update displayNumber jika datanya ada (biasanya saat saklar ON)
+        if (displayNumber) {
+            updateData.display_number = displayNumber;
+        }
+
         await db.collection('sessions').updateOne(
             { phone_number: phoneNumber },
-            { 
-                $set: { 
-                    is_human_mode: isHumanMode,
-                    last_message: lastMessage,
-                    updated_at: new Date()
-                } 
-            },
+            { $set: updateData },
             { upsert: true } // Jika belum ada datanya, buat baru
         );
     } catch (error) {
