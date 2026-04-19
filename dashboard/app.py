@@ -28,14 +28,14 @@ try:
     inventory_col = db['inventory'] 
     session_col = db['sessions'] 
 except Exception as e:
-    st.error(f"❌ Gagal terhubung ke MongoDB: {e}")
+    st.error(f"Gagal terhubung ke MongoDB: {e}")
     st.stop()
 
 # --- SIDEBAR ---
 with st.sidebar:
     st.markdown(" **Live Demo**")
     st.link_button("Test Bot di WhatsApp (klik disini)", "https://wa.me/6285121571837", type="primary", use_container_width=True)
-    st.header("⚙️ Status Sistem")
+    st.header("Status Sistem")
     st.success("MongoDB: Terhubung")
     st.info("Model: GPT-4o-mini (Tools Enabled)")
 
@@ -86,13 +86,13 @@ with tab1:
                         'Harga (Rp)': 'price'
                     }).to_dict('records')
                     inventory_col.insert_many(records)
-                st.success("✅ Database Gudang berhasil diperbarui!")
+                st.success("Database Gudang berhasil diperbarui!")
                 st.rerun()
             except Exception as e:
                 st.error(f"❌ Gagal menyimpan perubahan: {e}")
 
     with col_btn2:
-        if st.button("⚠️ Kosongkan Semua", use_container_width=True):
+        if st.button(" Kosongkan Semua", use_container_width=True):
             inventory_col.delete_many({})
             st.rerun()
 
@@ -118,7 +118,7 @@ with tab2:
                 {"$set": {"prompt": new_prompt, "knowledge_base": extracted_text}},
                 upsert=True 
             )
-            st.success("✅ Konfigurasi bot tersimpan!")
+            st.success("Konfigurasi bot tersimpan!")
             st.rerun()
 
     st.markdown("---")
@@ -127,10 +127,10 @@ with tab2:
         st.warning("⚠️ Saat ini ada Knowledge Base yang tersimpan.")
         if st.button("Hapus Knowledge Base dari Otak Bot", type="primary"):
             collection.update_one({"type": "system_prompt"}, {"$set": {"knowledge_base": ""}})
-            st.success("✅ Memori berhasil dibersihkan!")
+            st.success("Memori berhasil dibersihkan!")
             st.rerun()
     else:
-        st.info("✅ Memori aman. Tidak ada Knowledge Base yang tersimpan.")
+        st.info(" Memori aman. Tidak ada Knowledge Base yang tersimpan.")
 
 # TAB 3: INSIGHT & ANALITIK
 with tab3:
@@ -176,13 +176,13 @@ with tab3:
         low_stock_df = df_analytics[(df_analytics['stock'] > 0) & (df_analytics['stock'] < 5)]
         
         if not out_of_stock_df.empty:
-            st.error("❌ **BARANG HABIS:** Segera lakukan pengadaan.")
+            st.error(" **BARANG HABIS:** Segera lakukan pengadaan.")
             st.dataframe(out_of_stock_df[['item_name', 'stock']], hide_index=True, use_container_width=True)
         if not low_stock_df.empty:
-            st.warning("⚠️ **STOK MENIPIS:** Bersiap untuk restock.")
+            st.warning(" **STOK MENIPIS:** Bersiap untuk restock.")
             st.dataframe(low_stock_df[['item_name', 'stock']], hide_index=True, use_container_width=True)
         if out_of_stock_df.empty and low_stock_df.empty:
-            st.success("✅ Seluruh stok barang dalam kondisi aman.")
+            st.success(" Seluruh stok barang dalam kondisi aman.")
     else:
         st.info("Gudang masih kosong.")
 
@@ -195,7 +195,7 @@ with tab4:
     human_mode_users = list(session_col.find({"is_human_mode": True}, {"_id": 0, "phone_number": 1, "last_message": 1, "updated_at": 1, "display_number": 1}))
 
     if human_mode_users:
-        st.error(f"🚨 PERHATIAN: Ada {len(human_mode_users)} pelanggan menunggu Admin!")
+        st.error(f" PERHATIAN: Ada {len(human_mode_users)} pelanggan menunggu Admin!")
         
         for user in human_mode_users:
             phone_num = user.get('phone_number') # ID mesin untuk dikirim balik ke database
@@ -216,9 +216,9 @@ with tab4:
             with st.expander(f"📱 Pelanggan: {display_num} | {time_display}"):
                 st.write(f"**Pesan Terakhir:** {user.get('last_message', 'Tidak ada data')}")
                 st.divider()
-                if st.button(f"✅ Selesaikan & Aktifkan AI", key=phone_num):
+                if st.button(f" Selesaikan & Aktifkan AI", key=phone_num):
                     session_col.update_one({"phone_number": phone_num}, {"$set": {"is_human_mode": False}})
-                    st.success(f"✅ AI kembali aktif untuk {display_num}")
+                    st.success(f" AI kembali aktif untuk {display_num}")
                     st.rerun()
     else:
-        st.success("✅ Semua pelanggan sedang dilayani oleh AI.")
+        st.success(" Semua pelanggan sedang dilayani oleh AI.")
