@@ -8,9 +8,9 @@ async function connectDB() {
     try {
         await client.connect();
         db = client.db('whatsapp_bot_2'); 
-        console.log('✅ DATABASE: Berhasil terhubung ke MongoDB Atlas (Bot 2)!');
+        console.log('DATABASE: Berhasil terhubung ke MongoDB Atlas (Bot 2)!');
     } catch (error) {
-        console.error('❌ DATABASE ERROR: Gagal terhubung ke MongoDB. Cek IP Whitelist di Atlas!');
+        console.error('DATABASE ERROR: Gagal terhubung ke MongoDB. Cek IP Whitelist di Atlas!');
         console.error(error); 
     }
 }
@@ -28,7 +28,7 @@ async function getSystemPrompt() {
             knowledgeBase: config.knowledge_base || ""
         } : defaultConfig;
     } catch (error) {
-        console.error("❌ Gagal mengambil konfigurasi dari database:", error);
+        console.error("Gagal mengambil konfigurasi dari database:", error);
         return defaultConfig;
     }
 }
@@ -48,7 +48,7 @@ async function getInventory() {
         });
         return inventoryText;
     } catch (error) {
-        console.error("❌ Gagal mengambil data inventaris:", error);
+        console.error("Gagal mengambil data inventaris:", error);
         return "Terjadi kesalahan saat membaca gudang.";
     }
 }
@@ -80,7 +80,7 @@ async function reduceStock(itemName, quantity) {
             message: `Berhasil memotong ${quantity} pcs stok '${itemName}'. Sisa stok di gudang sekarang: ${item.stock - quantity} pcs.` 
         };
     } catch (error) {
-        console.error("❌ Gagal memotong stok:", error);
+        console.error("Gagal memotong stok:", error);
         return { success: false, message: "Terjadi kesalahan sistem saat memotong stok." };
     }
 }
@@ -92,7 +92,7 @@ async function getHumanMode(phoneNumber) {
         const session = await db.collection('sessions').findOne({ phone_number: phoneNumber });
         return session ? session.is_human_mode : false;
     } catch (error) {
-        console.error("❌ Error getHumanMode:", error);
+        console.error("Error getHumanMode:", error);
         return false;
     }
 }
@@ -118,7 +118,7 @@ async function setHumanMode(phoneNumber, isHumanMode, lastMessage = "", displayN
             { upsert: true } // Jika belum ada datanya, buat baru
         );
     } catch (error) {
-        console.error("❌ Error setHumanMode:", error);
+        console.error("Error setHumanMode:", error);
     }
 }
 
