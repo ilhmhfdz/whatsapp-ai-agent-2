@@ -31,7 +31,7 @@ ATURAN MUTLAK (STRICT RULES):
 3. JANGAN PERNAH membalas dengan kalimat "Pesanan diamankan" atau "Pesanan diproses" SEBELUM kamu berhasil memanggil tool 'reduceStock'.`;
 
             if (isOrderAlreadyProcessed) {
-                finalSystemPrompt += `\n\n🚨 [STATUS SISTEM]: Kamu SUDAH berhasil memotong stok pesanan ini di obrolan sebelumnya. JANGAN PERNAH memanggil fungsi 'reduceStock' lagi di balasan ini!`;
+                finalSystemPrompt += `\n\n[STATUS SISTEM]: Kamu SUDAH berhasil memotong stok pesanan ini di obrolan sebelumnya. JANGAN PERNAH memanggil fungsi 'reduceStock' lagi di balasan ini!`;
             }
         }
 
@@ -92,7 +92,7 @@ ATURAN MUTLAK (STRICT RULES):
                 // 1. Tool Potong Stok
                 if (toolCall.function.name === "reduceStock") {
                     if (isOrderAlreadyProcessed) {
-                        console.log(`🚫 [SYSTEM BLOCK] AI mencoba memotong stok ganda. Eksekusi dicegah!`);
+                        console.log(`[SYSTEM BLOCK] AI mencoba memotong stok ganda. Eksekusi dicegah!`);
                         messages.push({
                             tool_call_id: toolCall.id,
                             role: "tool",
@@ -103,7 +103,7 @@ ATURAN MUTLAK (STRICT RULES):
                     }
 
                     const args = JSON.parse(toolCall.function.arguments);
-                    console.log(`\n⚙️  [SYSTEM] AI memicu potong stok: ${args.itemName} x ${args.quantity}`);
+                    console.log(`\n [SYSTEM] AI memicu potong stok: ${args.itemName} x ${args.quantity}`);
                     const dbResult = await reduceStockFunc(args.itemName, args.quantity);
                     messages.push({
                         tool_call_id: toolCall.id,
@@ -116,7 +116,7 @@ ATURAN MUTLAK (STRICT RULES):
                 // 2. Tool Panggil Manusia
                 if (toolCall.function.name === "transferToHuman") {
                     const args = JSON.parse(toolCall.function.arguments);
-                    console.log(`\n🚨 [SYSTEM] AI mengalihkan chat ke Admin. Alasan: ${args.reason}`);
+                    console.log(`\n [SYSTEM] AI mengalihkan chat ke Admin. Alasan: ${args.reason}`);
                     
                     // Nyalakan saklar di database via fungsi index.js
                     await transferToHumanFunc(args.reason);
@@ -141,7 +141,7 @@ ATURAN MUTLAK (STRICT RULES):
         return responseMessage.content;
 
     } catch (error) {
-        console.error('❌ Error OpenAI:', error);
+        console.error('Error OpenAI:', error);
         return "Maaf, sistem AI sedang beristirahat sebentar. Silakan coba lagi nanti.";
     }
 }
